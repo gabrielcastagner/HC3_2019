@@ -3,6 +3,8 @@
 
 module Main exposing (..)
 
+import Delay exposing (..)
+
 import GraphicSVG exposing(..)
 import GraphicSVG.EllieApp exposing (..)
 import Random
@@ -19,6 +21,8 @@ type alias Model =
     { time : Float
         , winningDoor : Int
         , chosenDoor : Int
+        , autoPlayWillChoose : Int
+        , autoPlayWillKeep : Bool
         , doorToNotReveal : Int --door to not reveal, if we've already chosen the winning door
         , doorStates : List (Int, DoorState)
         , keepWins : Int
@@ -29,6 +33,7 @@ type alias Model =
         , tempDisplay : String
         , tempDisplayStart : Float
         , simulationState: SimulationState
+        , isAutoPlay: Bool
     }
 
 generateWinningDoor = Random.generate RandomDoor <|
@@ -36,6 +41,7 @@ generateWinningDoor = Random.generate RandomDoor <|
     (Random.int 0 (numDoors-1)) --first door is the winning door
     (Random.int 1 (numDoors-1)) --picks which door will be revealed
 
+generateChoice = Random.generate RandomChoice <| (Random.int 0 (numDoors-1))
 
 main : EllieAppWithTick () Model Msg
 main =
@@ -59,7 +65,21 @@ myShapes model =
         ,maybeGetButtons model.simulationState |> move (0,30)
         ,text ("Keep- Wins: " ++ (String.fromInt <| model.keepWins) ++ " || Losses: " ++ (String.fromInt <| model.keepLosses)) |> centered |> filled yellow |> move(0,-30)
         ,text ("Switch- Wins: " ++ (String.fromInt <| model.switchWins) ++ " || Losses: " ++ (String.fromInt <| model.switchLosses)) |> centered |> filled yellow |> move(0,-40)
+        ,getAutoPlayButton model.isAutoPlay |> move(0,-50)
     ]
+
+getAutoPlayButton isAutoPlay =
+    group[ group [
+        rectangle 33 10 |> filled orange
+        , text "Simulate once (keep)" |> centered |> size 3 |> filled white
+    ] |> notifyTap (ToggleAutoplay True) |> move(-20,0)
+    ,
+    group [
+        rectangle 33 10 |> filled orange
+        , text "Simulate once (switch)" |> centered |> size 3 |> filled white
+    ] |> notifyTap (ToggleAutoplay False) |> move(20,0)
+    ]
+
 
 maybeGetTempDisplay tempDisplay tempDisplayStart time =
     if time - tempDisplayStart < tempDisplayTime then
@@ -118,6 +138,8 @@ type Msg = Tick Float GetKeyState
          | Switch
          | InvalidAction
          | TryAgain
+         | ToggleAutoplay Bool
+         | RandomChoice Int
 
 type SimulationState = AwaitingInitialSelection | AwaitingKeepOrSwitch | DisplayResult
 
@@ -178,36 +200,53 @@ getWinOrLoseMessage model won =
     else
         "You've lost!"
 
+autoUpdate model =
+    if model.isAutoPlay then
+        if model.simulationState == AwaitingInitialSelection then
+            update (ClickOnDoor model.autoPlayWillChoose) model
+        else if model.simulationState == AwaitingKeepOrSwitch then
+            if model.autoPlayWillKeep then
+                update Keep model
+            else
+                update Switch model
+        else
+            update TryAgain model
+    else
+       update InvalidAction model
+
+
 update msg model = case msg of
                     Tick t _ -> ({ model | time = t}, Cmd.none)
-                    RandomDoor (rd1, rd2) -> ({ model | winningDoor = rd1, doorToNotReveal = rd2, doorStates = initListWithWinner rd1}, Cmd.none)
-                    ClickOnDoor idx -> ({ model | chosenDoor = idx
+                    RandomDoor (rd1, rd2) -> ({ model | winningDoor = rd1, simulationState = AwaitingInitialSelection, doorToNotReveal = rd2, doorStates = initListWithWinner rd1}, Cmd.none)
+                    ClickOnDoor idx -> { model | chosenDoor = idx
                             , simulationState = if model.simulationState == AwaitingInitialSelection then AwaitingKeepOrSwitch else model.simulationState
                             , doorStates = chooseDoor idx model
-                        }, Cmd.none)
+                        } |> autoUpdate
                     InvalidAction -> ({ model | tempDisplay = "", tempDisplayStart = model.time}, Cmd.none) --Does nothing
-                    Keep -> ({ model |
+                    Keep -> { model |
                         simulationState = if model.simulationState == AwaitingKeepOrSwitch then DisplayResult else model.simulationState
                         , resultMessage = getWinOrLoseMessage model (hasWon model True)
                         , keepWins = if hasWon model True then model.keepWins + 1 else model.keepWins
                         , keepLosses = if not (hasWon model True) then model.keepLosses + 1 else model.keepLosses
                         , doorStates = revealLastDoor model.doorStates
-                        }, Cmd.none)
-                    Switch -> ({ model |
+                        }|> autoUpdate
+                    Switch -> { model |
                         simulationState = if model.simulationState == AwaitingKeepOrSwitch then DisplayResult else model.simulationState
                         , resultMessage = getWinOrLoseMessage model (hasWon model False)
                         , switchWins = if hasWon model False then model.switchWins + 1 else model.switchWins
                         , switchLosses = if not (hasWon model False) then model.switchLosses + 1 else model.switchLosses
                         , doorStates = revealLastDoor model.doorStates
-                        }, Cmd.none)
-                    TryAgain -> ({model |
-                        simulationState = AwaitingInitialSelection
-                        }, generateWinningDoor)
+                        } |> autoUpdate
+                    TryAgain -> ({model | isAutoPlay = False}, generateWinningDoor)
+                    ToggleAutoplay willKeep -> ({model | isAutoPlay = True, autoPlayWillKeep = willKeep}, generateChoice)
+                    RandomChoice randomChoice -> {model | autoPlayWillChoose = randomChoice} |> autoUpdate
 
 init = { time = 0
         , winningDoor = 0
         , chosenDoor = 0
         , doorToNotReveal = 0
+        , autoPlayWillChoose = 0
+        , autoPlayWillKeep = True
         , doorStates = List.map (\idx -> (idx, LosingClosed)) (List.range 0 numDoors)
         , keepWins = 0
         , keepLosses = 0
@@ -217,5 +256,6 @@ init = { time = 0
         , resultMessage = ""
         , tempDisplayStart = 0
         , simulationState = AwaitingInitialSelection
+        , isAutoPlay = False
         }
 

@@ -8763,6 +8763,8 @@ var $author$project$Main$generateWinningDoor = A2(
 var $author$project$Main$AwaitingInitialSelection = {$: 'AwaitingInitialSelection'};
 var $author$project$Main$LosingClosed = {$: 'LosingClosed'};
 var $author$project$Main$init = {
+	autoPlayWillChoose: 0,
+	autoPlayWillKeep: true,
 	chosenDoor: 0,
 	doorStates: A2(
 		$elm$core$List$map,
@@ -8771,6 +8773,7 @@ var $author$project$Main$init = {
 		},
 		A2($elm$core$List$range, 0, $author$project$Main$numDoors)),
 	doorToNotReveal: 0,
+	isAutoPlay: false,
 	keepLosses: 0,
 	keepWins: 0,
 	resultMessage: '',
@@ -8784,7 +8787,14 @@ var $author$project$Main$init = {
 };
 var $elm$core$Platform$Sub$none = $elm$core$Platform$Sub$batch(_List_Nil);
 var $author$project$Main$AwaitingKeepOrSwitch = {$: 'AwaitingKeepOrSwitch'};
+var $author$project$Main$ClickOnDoor = function (a) {
+	return {$: 'ClickOnDoor', a: a};
+};
 var $author$project$Main$DisplayResult = {$: 'DisplayResult'};
+var $author$project$Main$InvalidAction = {$: 'InvalidAction'};
+var $author$project$Main$Keep = {$: 'Keep'};
+var $author$project$Main$Switch = {$: 'Switch'};
+var $author$project$Main$TryAgain = {$: 'TryAgain'};
 var $author$project$Main$Chosen = {$: 'Chosen'};
 var $author$project$Main$LosingOpen = {$: 'LosingOpen'};
 var $author$project$Main$WinningClosed = {$: 'WinningClosed'};
@@ -8807,6 +8817,13 @@ var $author$project$Main$chooseDoor = F2(
 			},
 			model.doorStates) : model.doorStates;
 	});
+var $author$project$Main$RandomChoice = function (a) {
+	return {$: 'RandomChoice', a: a};
+};
+var $author$project$Main$generateChoice = A2(
+	$elm$random$Random$generate,
+	$author$project$Main$RandomChoice,
+	A2($elm$random$Random$int, 0, $author$project$Main$numDoors - 1));
 var $author$project$Main$getWinOrLoseMessage = F2(
 	function (model, won) {
 		return won ? 'You\'ve won!' : 'You\'ve lost!';
@@ -8840,6 +8857,12 @@ var $author$project$Main$revealLastDoor = function (doorStates) {
 		},
 		doorStates);
 };
+var $author$project$Main$autoUpdate = function (model) {
+	return model.isAutoPlay ? (_Utils_eq(model.simulationState, $author$project$Main$AwaitingInitialSelection) ? A2(
+		$author$project$Main$update,
+		$author$project$Main$ClickOnDoor(model.autoPlayWillChoose),
+		model) : (_Utils_eq(model.simulationState, $author$project$Main$AwaitingKeepOrSwitch) ? (model.autoPlayWillKeep ? A2($author$project$Main$update, $author$project$Main$Keep, model) : A2($author$project$Main$update, $author$project$Main$Switch, model)) : A2($author$project$Main$update, $author$project$Main$TryAgain, model))) : A2($author$project$Main$update, $author$project$Main$InvalidAction, model);
+};
 var $author$project$Main$update = F2(
 	function (msg, model) {
 		switch (msg.$) {
@@ -8860,20 +8883,20 @@ var $author$project$Main$update = F2(
 						{
 							doorStates: $author$project$Main$initListWithWinner(rd1),
 							doorToNotReveal: rd2,
+							simulationState: $author$project$Main$AwaitingInitialSelection,
 							winningDoor: rd1
 						}),
 					$elm$core$Platform$Cmd$none);
 			case 'ClickOnDoor':
 				var idx = msg.a;
-				return _Utils_Tuple2(
+				return $author$project$Main$autoUpdate(
 					_Utils_update(
 						model,
 						{
 							chosenDoor: idx,
 							doorStates: A2($author$project$Main$chooseDoor, idx, model),
 							simulationState: _Utils_eq(model.simulationState, $author$project$Main$AwaitingInitialSelection) ? $author$project$Main$AwaitingKeepOrSwitch : model.simulationState
-						}),
-					$elm$core$Platform$Cmd$none);
+						}));
 			case 'InvalidAction':
 				return _Utils_Tuple2(
 					_Utils_update(
@@ -8881,7 +8904,7 @@ var $author$project$Main$update = F2(
 						{tempDisplay: '', tempDisplayStart: model.time}),
 					$elm$core$Platform$Cmd$none);
 			case 'Keep':
-				return _Utils_Tuple2(
+				return $author$project$Main$autoUpdate(
 					_Utils_update(
 						model,
 						{
@@ -8893,10 +8916,9 @@ var $author$project$Main$update = F2(
 								model,
 								A2($author$project$Main$hasWon, model, true)),
 							simulationState: _Utils_eq(model.simulationState, $author$project$Main$AwaitingKeepOrSwitch) ? $author$project$Main$DisplayResult : model.simulationState
-						}),
-					$elm$core$Platform$Cmd$none);
+						}));
 			case 'Switch':
-				return _Utils_Tuple2(
+				return $author$project$Main$autoUpdate(
 					_Utils_update(
 						model,
 						{
@@ -8908,24 +8930,32 @@ var $author$project$Main$update = F2(
 							simulationState: _Utils_eq(model.simulationState, $author$project$Main$AwaitingKeepOrSwitch) ? $author$project$Main$DisplayResult : model.simulationState,
 							switchLosses: (!A2($author$project$Main$hasWon, model, false)) ? (model.switchLosses + 1) : model.switchLosses,
 							switchWins: A2($author$project$Main$hasWon, model, false) ? (model.switchWins + 1) : model.switchWins
-						}),
-					$elm$core$Platform$Cmd$none);
-			default:
+						}));
+			case 'TryAgain':
 				return _Utils_Tuple2(
 					_Utils_update(
 						model,
-						{simulationState: $author$project$Main$AwaitingInitialSelection}),
+						{isAutoPlay: false}),
 					$author$project$Main$generateWinningDoor);
+			case 'ToggleAutoplay':
+				var willKeep = msg.a;
+				return _Utils_Tuple2(
+					_Utils_update(
+						model,
+						{autoPlayWillKeep: willKeep, isAutoPlay: true}),
+					$author$project$Main$generateChoice);
+			default:
+				var randomChoice = msg.a;
+				return $author$project$Main$autoUpdate(
+					_Utils_update(
+						model,
+						{autoPlayWillChoose: randomChoice}));
 		}
 	});
 var $MacCASOutreach$graphicsvg$GraphicSVG$collage = F3(
 	function (w, h, shapes) {
 		return A3($MacCASOutreach$graphicsvg$GraphicSVG$Collage, w, h, shapes);
 	});
-var $author$project$Main$ClickOnDoor = function (a) {
-	return {$: 'ClickOnDoor', a: a};
-};
-var $author$project$Main$InvalidAction = {$: 'InvalidAction'};
 var $MacCASOutreach$graphicsvg$GraphicSVG$AlignCentred = {$: 'AlignCentred'};
 var $MacCASOutreach$graphicsvg$GraphicSVG$Face = F8(
 	function (a, b, c, d, e, f, g, h) {
@@ -8977,30 +9007,9 @@ var $author$project$Main$doorColour = function (doorState) {
 			return $MacCASOutreach$graphicsvg$GraphicSVG$red;
 	}
 };
-var $MacCASOutreach$graphicsvg$GraphicSVG$AlignLeft = {$: 'AlignLeft'};
-var $MacCASOutreach$graphicsvg$GraphicSVG$Serif = {$: 'Serif'};
-var $MacCASOutreach$graphicsvg$GraphicSVG$text = function (str) {
-	return A2(
-		$MacCASOutreach$graphicsvg$GraphicSVG$Text,
-		A8($MacCASOutreach$graphicsvg$GraphicSVG$Face, 12, false, false, false, false, false, $MacCASOutreach$graphicsvg$GraphicSVG$Serif, $MacCASOutreach$graphicsvg$GraphicSVG$AlignLeft),
-		str);
+var $author$project$Main$ToggleAutoplay = function (a) {
+	return {$: 'ToggleAutoplay', a: a};
 };
-var $author$project$Main$getInstructions = F2(
-	function (simulationState, model) {
-		switch (simulationState.$) {
-			case 'AwaitingInitialSelection':
-				return $MacCASOutreach$graphicsvg$GraphicSVG$text('Please choose a door.');
-			case 'AwaitingKeepOrSwitch':
-				return $MacCASOutreach$graphicsvg$GraphicSVG$text('Do you want to keep or switch?');
-			default:
-				return $MacCASOutreach$graphicsvg$GraphicSVG$text(model.resultMessage);
-		}
-	});
-var $author$project$Main$leftBound = -80;
-var $author$project$Main$rightBound = 80;
-var $author$project$Main$increment = ($author$project$Main$rightBound - $author$project$Main$leftBound) / $author$project$Main$numDoors;
-var $author$project$Main$Keep = {$: 'Keep'};
-var $author$project$Main$Switch = {$: 'Switch'};
 var $MacCASOutreach$graphicsvg$GraphicSVG$notifyTap = F2(
 	function (msg, shape) {
 		return A2($MacCASOutreach$graphicsvg$GraphicSVG$Tap, msg, shape);
@@ -9032,6 +9041,78 @@ var $MacCASOutreach$graphicsvg$GraphicSVG$size = F2(
 			return a;
 		}
 	});
+var $MacCASOutreach$graphicsvg$GraphicSVG$AlignLeft = {$: 'AlignLeft'};
+var $MacCASOutreach$graphicsvg$GraphicSVG$Serif = {$: 'Serif'};
+var $MacCASOutreach$graphicsvg$GraphicSVG$text = function (str) {
+	return A2(
+		$MacCASOutreach$graphicsvg$GraphicSVG$Text,
+		A8($MacCASOutreach$graphicsvg$GraphicSVG$Face, 12, false, false, false, false, false, $MacCASOutreach$graphicsvg$GraphicSVG$Serif, $MacCASOutreach$graphicsvg$GraphicSVG$AlignLeft),
+		str);
+};
+var $author$project$Main$getAutoPlayButton = function (isAutoPlay) {
+	return $MacCASOutreach$graphicsvg$GraphicSVG$group(
+		_List_fromArray(
+			[
+				A2(
+				$MacCASOutreach$graphicsvg$GraphicSVG$move,
+				_Utils_Tuple2(-20, 0),
+				A2(
+					$MacCASOutreach$graphicsvg$GraphicSVG$notifyTap,
+					$author$project$Main$ToggleAutoplay(true),
+					$MacCASOutreach$graphicsvg$GraphicSVG$group(
+						_List_fromArray(
+							[
+								A2(
+								$MacCASOutreach$graphicsvg$GraphicSVG$filled,
+								$MacCASOutreach$graphicsvg$GraphicSVG$orange,
+								A2($MacCASOutreach$graphicsvg$GraphicSVG$rectangle, 33, 10)),
+								A2(
+								$MacCASOutreach$graphicsvg$GraphicSVG$filled,
+								$MacCASOutreach$graphicsvg$GraphicSVG$white,
+								A2(
+									$MacCASOutreach$graphicsvg$GraphicSVG$size,
+									3,
+									$MacCASOutreach$graphicsvg$GraphicSVG$centered(
+										$MacCASOutreach$graphicsvg$GraphicSVG$text('Simulate once (keep)'))))
+							])))),
+				A2(
+				$MacCASOutreach$graphicsvg$GraphicSVG$move,
+				_Utils_Tuple2(20, 0),
+				A2(
+					$MacCASOutreach$graphicsvg$GraphicSVG$notifyTap,
+					$author$project$Main$ToggleAutoplay(false),
+					$MacCASOutreach$graphicsvg$GraphicSVG$group(
+						_List_fromArray(
+							[
+								A2(
+								$MacCASOutreach$graphicsvg$GraphicSVG$filled,
+								$MacCASOutreach$graphicsvg$GraphicSVG$orange,
+								A2($MacCASOutreach$graphicsvg$GraphicSVG$rectangle, 33, 10)),
+								A2(
+								$MacCASOutreach$graphicsvg$GraphicSVG$filled,
+								$MacCASOutreach$graphicsvg$GraphicSVG$white,
+								A2(
+									$MacCASOutreach$graphicsvg$GraphicSVG$size,
+									3,
+									$MacCASOutreach$graphicsvg$GraphicSVG$centered(
+										$MacCASOutreach$graphicsvg$GraphicSVG$text('Simulate once (switch)'))))
+							]))))
+			]));
+};
+var $author$project$Main$getInstructions = F2(
+	function (simulationState, model) {
+		switch (simulationState.$) {
+			case 'AwaitingInitialSelection':
+				return $MacCASOutreach$graphicsvg$GraphicSVG$text('Please choose a door.');
+			case 'AwaitingKeepOrSwitch':
+				return $MacCASOutreach$graphicsvg$GraphicSVG$text('Do you want to keep or switch?');
+			default:
+				return $MacCASOutreach$graphicsvg$GraphicSVG$text(model.resultMessage);
+		}
+	});
+var $author$project$Main$leftBound = -80;
+var $author$project$Main$rightBound = 80;
+var $author$project$Main$increment = ($author$project$Main$rightBound - $author$project$Main$leftBound) / $author$project$Main$numDoors;
 var $author$project$Main$getKeepOrSwitchButtons = $MacCASOutreach$graphicsvg$GraphicSVG$group(
 	_List_fromArray(
 		[
@@ -9086,7 +9167,6 @@ var $author$project$Main$getKeepOrSwitchButtons = $MacCASOutreach$graphicsvg$Gra
 									$MacCASOutreach$graphicsvg$GraphicSVG$text('Switch')))))
 					])))
 		]));
-var $author$project$Main$TryAgain = {$: 'TryAgain'};
 var $author$project$Main$getTryAgainButton = A2(
 	$MacCASOutreach$graphicsvg$GraphicSVG$notifyTap,
 	$author$project$Main$TryAgain,
@@ -9193,7 +9273,11 @@ var $author$project$Main$myShapes = function (model) {
 					$MacCASOutreach$graphicsvg$GraphicSVG$yellow,
 					$MacCASOutreach$graphicsvg$GraphicSVG$centered(
 						$MacCASOutreach$graphicsvg$GraphicSVG$text(
-							'Switch- Wins: ' + ($elm$core$String$fromInt(model.switchWins) + (' || Losses: ' + $elm$core$String$fromInt(model.switchLosses)))))))
+							'Switch- Wins: ' + ($elm$core$String$fromInt(model.switchWins) + (' || Losses: ' + $elm$core$String$fromInt(model.switchLosses))))))),
+				A2(
+				$MacCASOutreach$graphicsvg$GraphicSVG$move,
+				_Utils_Tuple2(0, -50),
+				$author$project$Main$getAutoPlayButton(model.isAutoPlay))
 			]));
 };
 var $author$project$Main$view = function (model) {
