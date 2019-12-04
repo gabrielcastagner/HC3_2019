@@ -9,13 +9,20 @@ import GraphicSVG exposing(..)
 import GraphicSVG.EllieApp exposing (..)
 import Random
 
+page = "sevenDoor"
 
-numDoors = 7
+numDoors = 
+        (case page of 
+                "sevenDoor" -> 7
+                "threeDoor" -> 3
+                _ -> 7
+        )
 leftBound = -80
 rightBound = 80
 increment = (rightBound - leftBound) / (numDoors)
 squareSize = (rightBound - leftBound) / (numDoors) - 1
 tempDisplayTime = 1
+
 
 type alias Model =
     { time : Float
@@ -66,7 +73,15 @@ myShapes model =
         ,text ("Keep- Wins: " ++ (String.fromInt <| model.keepWins) ++ " || Losses: " ++ (String.fromInt <| model.keepLosses)) |> centered |> filled yellow |> move(0,-30)
         ,text ("Switch- Wins: " ++ (String.fromInt <| model.switchWins) ++ " || Losses: " ++ (String.fromInt <| model.switchLosses)) |> centered |> filled yellow |> move(0,-40)
         ,getAutoPlayButton model.isAutoPlay |> move(0,-50)
+        ,numDoorButton
     ]
+
+numDoorButton =
+    group [
+    rectangle 30 15 |> filled black
+    , text page |> centered |> size 5 |> filled white
+    ] |> move (-80, 50) -- |> notifyTap ( page "sevenDoor")
+
 
 getAutoPlayButton isAutoPlay =
     group[ group [
@@ -140,6 +155,7 @@ type Msg = Tick Float GetKeyState
          | TryAgain
          | ToggleAutoplay Bool
          | RandomChoice Int
+         -- | Page
 
 type SimulationState = AwaitingInitialSelection | AwaitingKeepOrSwitch | DisplayResult
 
@@ -240,6 +256,7 @@ update msg model = case msg of
                     TryAgain -> ({model | isAutoPlay = False}, generateWinningDoor)
                     ToggleAutoplay willKeep -> ({model | isAutoPlay = True, autoPlayWillKeep = willKeep}, generateChoice)
                     RandomChoice randomChoice -> {model | autoPlayWillChoose = randomChoice} |> autoUpdate
+                    -- Page page -> (page = "threeDoor")
 
 init = { time = 0
         , winningDoor = 0
@@ -247,7 +264,7 @@ init = { time = 0
         , doorToNotReveal = 0
         , autoPlayWillChoose = 0
         , autoPlayWillKeep = True
-        , doorStates = List.map (\idx -> (idx, LosingClosed)) (List.range 0 numDoors)
+        , doorStates = List.map (\idx -> (idx, LosingClosed)) (List.range 0 7) -- numDoors)
         , keepWins = 0
         , keepLosses = 0
         , switchWins = 0
