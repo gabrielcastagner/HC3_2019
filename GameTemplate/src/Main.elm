@@ -10,16 +10,17 @@ import GraphicSVG.EllieApp exposing (..)
 import Random
 
 
-numDoors = 7
+{-numDoors = 7-}
 leftBound = -80
 rightBound = 80
-increment = (rightBound - leftBound) / (numDoors)
-squareSize = (rightBound - leftBound) / (numDoors) - 1
+{-increment = (rightBound - leftBound) / (numDoors)-}
+{-squareSize = (rightBound - leftBound) / (numDoors) - 1-}
 tempDisplayTime = 1
 
 type alias Model =
     { time : Float
         , winningDoor : Int
+        , numberDoors: Int
         , chosenDoor : Int
         , autoPlayWillChoose : Int
         , autoPlayWillKeep : Bool
@@ -36,17 +37,17 @@ type alias Model =
         , isAutoPlay: Bool
     }
 
-generateWinningDoor = Random.generate RandomDoor <|
+generateWinningDoor numDoors = Random.generate RandomDoor <|
   Random.pair
     (Random.int 0 (numDoors-1)) --first door is the winning door
     (Random.int 1 (numDoors-1)) --picks which door will be revealed
 
-generateChoice = Random.generate RandomChoice <| (Random.int 0 (numDoors-1))
+generateChoice numDoors = Random.generate RandomChoice <| (Random.int 0 (numDoors-1))
 
 main : EllieAppWithTick () Model Msg
 main =
     ellieAppWithTick Tick
-        { init = \ _ -> (init, generateWinningDoor)
+        { init = \ _ -> (init, generateWinningDoor 7)
         , update = update
         , view = \ model -> { title = "Monty Hall Simulator", body = view model }
         , subscriptions = \_ -> Sub.none
@@ -55,7 +56,7 @@ main =
 view model = collage 192 128 (myShapes model)
 
 myShapes model =
-    [group (List.map (\(idx, doorState) -> (square squareSize |> filled (doorColour doorState) |> notifyTap (if doorState == WinningClosed || doorState == LosingClosed then ClickOnDoor idx else InvalidAction) |> move(leftBound + toFloat idx * increment + squareSize / 2, 0))) model.doorStates)]
+    [group (List.map (\(idx, doorState) -> (square ((rightBound - leftBound) / (model.numberDoors) - 1) |> filled (doorColour doorState) |> notifyTap (if doorState == WinningClosed || doorState == LosingClosed then ClickOnDoor idx else InvalidAction) |> move(leftBound + toFloat idx * ((rightBound - leftBound) / (model.numberDoors)) + ((rightBound - leftBound) / (model.numberDoors) - 1) / 2, 0))) model.doorStates)]
         ++
     [
         text "Monty Hall Simulator" |> centered |> filled black |> move (0,50)
@@ -66,6 +67,10 @@ myShapes model =
         ,text ("Keep- Wins: " ++ (String.fromInt <| model.keepWins) ++ " || Losses: " ++ (String.fromInt <| model.keepLosses)) |> centered |> filled yellow |> move(0,-30)
         ,text ("Switch- Wins: " ++ (String.fromInt <| model.switchWins) ++ " || Losses: " ++ (String.fromInt <| model.switchLosses)) |> centered |> filled yellow |> move(0,-40)
         ,getAutoPlayButton model.isAutoPlay |> move(0,-50)
+        , group [
+            rectangle 33 10 |> filled orange
+            , text "Run With 3" |> centered |> size 3 |> filled white
+        ] |> notifyTap (ChangeDoors) |> move(-70,-50)
     ]
 
 getAutoPlayButton isAutoPlay =
@@ -138,6 +143,7 @@ type Msg = Tick Float GetKeyState
          | Switch
          | InvalidAction
          | TryAgain
+         | ChangeDoors
          | ToggleAutoplay Bool
          | RandomChoice Int
 
@@ -145,7 +151,7 @@ type SimulationState = AwaitingInitialSelection | AwaitingKeepOrSwitch | Display
 
 type DoorState = WinningClosed | LosingClosed | WinningOpen | LosingOpen | Chosen | LosingRevealed
 
-initListWithWinner winningIdx = List.map (\idx -> (idx, if idx == winningIdx then WinningClosed else LosingClosed)) (List.range 0 (numDoors-1))
+initListWithWinner numDoors winningIdx = List.map (\idx -> (idx, if idx == winningIdx then WinningClosed else LosingClosed)) (List.range 0 (numDoors-1))
 
 getNextSimulationState currentSimulationState =
     case currentSimulationState of
@@ -153,7 +159,7 @@ getNextSimulationState currentSimulationState =
         AwaitingKeepOrSwitch -> DisplayResult
         DisplayResult -> DisplayResult
 
-revealDoor idx currentState winningDoor doorToNotReveal chosenDoor =
+revealDoor numDoors idx currentState winningDoor doorToNotReveal chosenDoor =
     if winningDoor == chosenDoor then
         if idx == (modBy numDoors (chosenDoor+doorToNotReveal)) then
             LosingClosed
@@ -167,7 +173,7 @@ revealDoor idx currentState winningDoor doorToNotReveal chosenDoor =
 
 chooseDoor idx model =
     if model.simulationState == AwaitingInitialSelection then
-            List.map (\(i, currentDoorState) -> (i, if i == idx then Chosen else revealDoor i currentDoorState model.winningDoor model.doorToNotReveal idx)) model.doorStates
+            List.map (\(i, currentDoorState) -> (i, if i == idx then Chosen else revealDoor model.numberDoors i currentDoorState model.winningDoor model.doorToNotReveal idx)) model.doorStates
     else
         model.doorStates
 
@@ -217,7 +223,7 @@ autoUpdate model =
 
 update msg model = case msg of
                     Tick t _ -> ({ model | time = t}, Cmd.none)
-                    RandomDoor (rd1, rd2) -> ({ model | winningDoor = rd1, simulationState = AwaitingInitialSelection, doorToNotReveal = rd2, doorStates = initListWithWinner rd1}, Cmd.none)
+                    RandomDoor (rd1, rd2) -> ({ model | winningDoor = rd1, simulationState = AwaitingInitialSelection, doorToNotReveal = rd2, doorStates = initListWithWinner model.numberDoors rd1}, Cmd.none)
                     ClickOnDoor idx -> { model | chosenDoor = idx
                             , simulationState = if model.simulationState == AwaitingInitialSelection then AwaitingKeepOrSwitch else model.simulationState
                             , doorStates = chooseDoor idx model
@@ -237,17 +243,19 @@ update msg model = case msg of
                         , switchLosses = if not (hasWon model False) then model.switchLosses + 1 else model.switchLosses
                         , doorStates = revealLastDoor model.doorStates
                         } |> autoUpdate
-                    TryAgain -> ({model | isAutoPlay = False}, generateWinningDoor)
-                    ToggleAutoplay willKeep -> ({model | isAutoPlay = True, autoPlayWillKeep = willKeep}, generateChoice)
+                    TryAgain -> ({model | isAutoPlay = False}, generateWinningDoor model.numberDoors)
+                    ChangeDoors -> ({model | numberDoors = ceiling 3}, Cmd.none)
+                    ToggleAutoplay willKeep -> ({model | isAutoPlay = True, autoPlayWillKeep = willKeep}, generateChoice model.numberDoors)
                     RandomChoice randomChoice -> {model | autoPlayWillChoose = randomChoice} |> autoUpdate
 
 init = { time = 0
         , winningDoor = 0
+        , numberDoors = 0
         , chosenDoor = 0
         , doorToNotReveal = 0
         , autoPlayWillChoose = 0
         , autoPlayWillKeep = True
-        , doorStates = List.map (\idx -> (idx, LosingClosed)) (List.range 0 numDoors)
+        , doorStates = List.map (\idx -> (idx, LosingClosed)) (List.range 0 7)
         , keepWins = 0
         , keepLosses = 0
         , switchWins = 0
